@@ -12,7 +12,7 @@ func startServer(name string, port string) {
 	mux := http.NewServeMux()
 
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "Greetings from %v\n", name)
 	}))
 
