@@ -1,4 +1,4 @@
-module github.com/gusandrioli/min-loadb
+module github.com/gusandrioli/min-rp
 
 go 1.18
 

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync"
 
-	lb "github.com/gusandrioli/min-loadb"
+	rp "github.com/gusandrioli/min-rp"
 )
 
 func startServer(name string, port string) {
@@ -24,10 +24,10 @@ func main() {
 	wg.Add(5)
 
 	go func() {
-		lb.SetReverseProxyAndServe(&lb.SetReverseProxyAndServeOpts{
-			Config: &lb.Config{
-				LoadBalancer: lb.LoadBalancer{Port: "8080"},
-				Workers: []*lb.Worker{
+		rp.SetReverseProxyAndServe(&rp.SetReverseProxyAndServeOpts{
+			Config: &rp.Config{
+				ReverseProxy: rp.ReverseProxy{Port: "8080"},
+				Workers: []*rp.Worker{
 					{URL: "http://localhost:8081/"},
 					{URL: "http://localhost:8082/"},
 					{URL: "http://localhost:8083/"},
@@ -36,6 +36,7 @@ func main() {
 					{URL: "http://localhost:8086/"},
 					{URL: "http://localhost:8087/"},
 				},
+				Type: rp.ReverseProxyTypeRoundRobin,
 			},
 		})
 		wg.Done()

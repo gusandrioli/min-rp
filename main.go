@@ -15,19 +15,23 @@ import (
 var config *Config
 
 const (
-	HTTPConnTypeTCP string = "tcp"
+	HTTPConnTypeTCP            string           = "tcp"
+	ReverseProxyTypeRoundRobin ReverseProxyType = "RoundRobin"
+	ReverseProxyTypePathPrefix ReverseProxyType = "PathPrefix"
 )
 
 type (
-	Path string // Path represents a URL path
+	Path             string // Path represents a URL path
+	ReverseProxyType string
 )
 
 type Config struct {
-	LoadBalancer LoadBalancer
+	ReverseProxy ReverseProxy
 	Workers      []*Worker
+	Type         ReverseProxyType
 }
 
-type LoadBalancer struct {
+type ReverseProxy struct {
 	Port string
 }
 
@@ -50,8 +54,8 @@ func SetReverseProxyAndServe(opts *SetReverseProxyAndServeOpts) {
 	go healthCheck()
 
 	server := http.Server{
-		Addr:    ":" + config.LoadBalancer.Port,
-		Handler: http.HandlerFunc(loadBalancerHandler),
+		Addr:    ":" + config.ReverseProxy.Port,
+		Handler: http.HandlerFunc(ReverseProxyHandler),
 	}
 
 	if err := server.ListenAndServe(); err != nil {
@@ -62,7 +66,7 @@ func SetReverseProxyAndServe(opts *SetReverseProxyAndServeOpts) {
 var mu sync.Mutex
 var requestCounter int = 0
 
-func loadBalancerHandler(w http.ResponseWriter, r *http.Request) {
+func ReverseProxyHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	currentWorker := config.FindCurrentWorker(w, r)
 
@@ -75,36 +79,29 @@ func loadBalancerHandler(w http.ResponseWriter, r *http.Request) {
 
 	rp := httputil.NewSingleHostReverseProxy(targetURL)
 	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		// TODO: implement retry
 		log.Printf("%v is dead.", targetURL)
 		currentWorker.SetAlive(false)
-		loadBalancerHandler(w, r)
+		ReverseProxyHandler(w, r)
 	}
 
 	rp.ServeHTTP(w, r)
 }
 
 func (config *Config) FindCurrentWorker(w http.ResponseWriter, r *http.Request) *Worker {
-	numWorkers := len(config.Workers)
-
-	var currentWorker *Worker
-
-	workerFoundByPath := config.FindWorkerByPath(w, r)
-	if workerFoundByPath != nil && workerFoundByPath.IsAlive() {
-		return workerFoundByPath
+	if config.Type == ReverseProxyTypePathPrefix {
+		workerFoundByPath := config.FindWorkerByPath(w, r)
+		if workerFoundByPath != nil && workerFoundByPath.IsAlive() {
+			return workerFoundByPath
+		}
 	}
 
-	if requestCounter >= numWorkers {
-		requestCounter = 0
+	// defaults to RR
+	workerFoundByRR := config.FindWorkerByRoundRobin(w, r)
+	if workerFoundByRR != nil && workerFoundByRR.IsAlive() {
+		return workerFoundByRR
 	}
 
-	currentWorker = config.Workers[requestCounter]
-
-	if !currentWorker.IsAlive() {
-		requestCounter++
-	}
-
-	return currentWorker
+	return nil
 }
 
 func (config *Config) FindWorkerByPath(w http.ResponseWriter, r *http.Request) *Worker {
@@ -115,6 +112,21 @@ func (config *Config) FindWorkerByPath(w http.ResponseWriter, r *http.Request) *
 	}
 
 	return nil
+}
+
+func (config *Config) FindWorkerByRoundRobin(w http.ResponseWriter, r *http.Request) *Worker {
+	if requestCounter >= len(config.Workers) {
+		requestCounter = 0
+	}
+
+	currentWorker := config.Workers[requestCounter]
+
+	if !currentWorker.IsAlive() {
+		requestCounter++
+		return nil
+	}
+
+	return currentWorker
 }
 
 func (worker *Worker) SetAlive(b bool) {
