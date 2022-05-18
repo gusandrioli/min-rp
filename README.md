@@ -1,7 +1,8 @@
-# Minimal Reverse Proxy implemented in Golang
+# **min-rp**
+Minimal Reverse Proxy with different modes implemented in Golang
 
 ## Quick Setup
-Check full examples at examples/ directory
+Check full examples at `examples/` directory
 ```go
 rp.SetReverseProxyAndServe(
     &rp.SetReverseProxyAndServeOpts{
